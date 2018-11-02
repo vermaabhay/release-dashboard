@@ -33,7 +33,7 @@ def connectToDb(db_host,db_user,db_pass,db_name,db_port):
 
 #conn = connectToDb(db_host,db_user,db_pass,db_name,db_port)
 
-engine = create_engine('mysql+mysqldb://%s:%s@%s:%s/%s' % (db_user, db_pass, db_host, db_port, db_name))
+engine = create_engine('mysql+mysqldb://%s:%s@%s:%s/%s' % (db_user, db_pass, db_host, db_port, db_name),pool_pre_ping=True)
 
 ###########################
 # Data Manipulation / Model
@@ -41,12 +41,19 @@ engine = create_engine('mysql+mysqldb://%s:%s@%s:%s/%s' % (db_user, db_pass, db_
 
 def fetch_data(query):
     #result = pd.read_sql(sql=query,con=conn)
+    global engine
     try:
         conn = engine.connect()
-        result = pd.read_sql(sql=query,con=conn)
-        return result
+        print("Connection Successful")
     except exc.SQLAlchemyError as e:
         print("Error Fetching SQLAlchemy Data",e)
+        print("Reconnecting...")
+        engine = create_engine('mysql+mysqldb://%s:%s@%s:%s/%s' % (db_user, db_pass, db_host, db_port, db_name))
+        conn = engine.connect()
+
+    result = pd.read_sql(sql=query,con=conn)
+    return result
+
 
 
 def get_comp_names():
