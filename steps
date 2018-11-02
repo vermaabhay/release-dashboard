@@ -1,0 +1,10 @@
+yum install zlib-devel bzip2-devel openssl-devel ncurses-devel sqlite-devel
+https://www.python.org/ftp/python/3.6.2/Python-3.6.2.tgz
+tar -xzf Python-3.6.2.tgz
+cd Python-3.6.2
+./configure --prefix=/opt/python-3.6.2 --with-ssl
+make && make install
+echo "export PATH=/opt/python-3.6.2/bin:$PATH" >> /etc/profile
+source /etc/profile
+pip3 install virtualenv
+
