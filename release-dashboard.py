@@ -1,6 +1,5 @@
 # standard library
 import os
-
 # dash libs
 import dash
 from dash.dependencies import Input, Output
@@ -8,14 +7,14 @@ import dash_core_components as dcc
 import dash_html_components as html
 import plotly.figure_factory as ff
 import plotly.graph_objs as go
-
 # pydata stack
 import pandas as pd
-
 #import MySQLdb as mdb
 import pymysql as mdb
-
 from sqlalchemy import create_engine
+from sqlalchemy import exc
+import datetime
+from datetime import datetime as dt
 
 
 db_host = ''
@@ -46,8 +45,8 @@ def fetch_data(query):
         conn = engine.connect()
         result = pd.read_sql(sql=query,con=conn)
         return result
-    except Error as e:
-        print("Error Fetching Data",e)
+    except exc.SQLAlchemyError as e:
+        print("Error Fetching SQLAlchemy Data",e)
 
 
 def get_comp_names():
@@ -60,7 +59,6 @@ def get_comp_names():
     return comps
 
 
-
 def get_sub_comp_names(comp_name):
 
     '''Returns the list of sub-component names for a component name from the database'''
@@ -71,7 +69,6 @@ def get_sub_comp_names(comp_name):
     return subComps
 
 
-
 def get_release_data(comp_name,sub_comp_name):
 
     '''Returns release data for the respective compnent and sub-component'''
@@ -80,21 +77,39 @@ def get_release_data(comp_name,sub_comp_name):
     results = fetch_data(query)
     return results
 
-#########################
-# Dashboard Layout / View
-#########################
+
+def get_release_data_for_date_range(start_date,end_date):
+
+    '''Returns release data for the date range'''
+    start_date = start_date+" 00:00:00"
+    end_date = end_date+" 23:59:59"
+    query = "SELECT * FROM ReleaseData WHERE ReleaseDate>='%s' AND ReleaseDate<='%s' ORDER BY ReleaseDate DESC" % (start_date,end_date)
+    results = fetch_data(query)
+    return results
+
+
+def no_results():
+        # Page Header
+    result = html.Div([
+        html.Br(),
+        html.Br(),
+        html.H4('No Results Found',style={'textAlign': 'center'})
+    ])
+    return result
+
 
 def generate_table(dataframe, max_rows=10):
 
     '''Given dataframe, return template generated using Dash components'''
     if(dataframe.size == 0):
-        return None
+        return no_results()
     else:
         num = dataframe.ID.size
         s_no = list(range(1, num+1))
         dataframe = dataframe.drop(['ID'], axis=1)
         dataframe.insert(loc=0, column='S.No.', value=s_no)
-
+ 
+        release_date = ['ReleaseDate']
         hyper_link_col_list = ['SprintLink','ConfluenceLink']
         rows = []
         for i in range(len(dataframe)):
@@ -103,6 +118,18 @@ def generate_table(dataframe, max_rows=10):
                 value = dataframe.iloc[i][col]
                 if col in hyper_link_col_list:
                     cell = html.Td(html.A(href=value, target="_blank", children="Link"))
+                elif col in release_date:
+                    new_date_format = value.strftime("%d-%b-%Y %H:%M:%S")
+                    cell = html.Td(children=new_date_format)
+                elif col == 'CompName':
+                    comp = value
+                    cell = html.Td(children=value)
+                elif col == 'SubCompName':
+                    subcomp = value
+                    cell = html.Td(children=value)
+                elif (col == 'BuildNum' and comp is not None and subcomp is not None):
+                    build_url = 'https://jenkins.ops.snapdeal.io/job/'+comp+'/job/'+subcomp+'/job/build/'+str(value)
+                    cell = html.Td(html.A(href=build_url, target="_blank", children="#"+str(value)))
                 else:
                     cell = html.Td(children=value)
                 row.append(cell)
@@ -121,10 +148,8 @@ def generate_table(dataframe, max_rows=10):
         )
 
 
-def onLoad_comp_names():
-
-    '''Actions to perform upon initial page load'''
-
+def load_comp_names():
+    '''Load Component Names'''
     comps = (
         [{'label': comp, 'value': comp}
          for comp in get_comp_names()]
@@ -132,6 +157,157 @@ def onLoad_comp_names():
     return comps
 
 
+def get_header():
+    header = html.Div([
+        html.Br(),
+        html.H1('Production Release Dashboard',style={'textAlign': 'center'})
+    ])
+    return header
+
+
+def get_tabs():
+    get_tabs = html.Div([
+        dcc.Tabs(id="tabs", value='history', children=[
+                dcc.Tab(label='Release History', value='history'),
+                dcc.Tab(label='Release TimeLine', value='timeline'),
+            ]),
+        html.Div(id='tab-output')
+        ])
+    return get_tabs
+
+
+def release_history():
+    release_history = html.Div([
+        html.Br(),
+        html.Div([
+            html.Div([
+                html.Div([
+                    html.Div('Component', className='three columns'),
+                    html.Div(dcc.Dropdown(id='component-selector',
+                                      options=load_comp_names()),
+                             className='nine columns')
+                ]),
+                html.Div([
+                    html.Div('Sub Component', className='three columns'),
+                    html.Div(dcc.Dropdown(id='subcomponent-selector'),
+                             className='nine columns')
+                ]),
+            ], className='offset-by-three six columns'),
+        html.Div(className='six columns'),
+        ], className='row'),
+        html.Div([
+            html.Div(
+                html.Table(id='release-data',style={'margin': '0 auto'}),
+                className='twelve columns'
+            ),
+        ]),
+    ])
+    return release_history
+
+
+def release_timeline():
+    release_timeline = html.Div([
+        dcc.Tabs(id="tabs-timeline", value='quick', children=[
+                dcc.Tab(label='Quick Ranges', value='quick'),
+                dcc.Tab(label='Time Range', value='duration'),
+            ]),
+        html.Div(id='tab-output-timeline')
+        ], style={
+        'width': '80%',
+        'fontFamily': 'Sans-Serif',
+        'margin-left': 'auto',
+        'margin-right': 'auto'
+    })
+    return release_timeline
+
+
+def date_picker():
+    get_date = html.Div([
+        dcc.DatePickerRange(
+            id='my-date-picker-range',
+            initial_visible_month=dt.now(),
+            day_size = 30,
+            month_format = "MMM, YYYY",
+        ),
+        ])
+    return get_date
+
+
+def radio_button():
+    get_radio_button = html.Div([
+         html.Br(),
+         dcc.RadioItems(id='quick-value',
+         options=[
+            {'label': 'Today', 'value': 0},
+            {'label': 'Yesterday', 'value': 1},
+            {'label': 'Last 2 days', 'value': 2},
+            {'label': 'Last 7 days', 'value': 3},
+            {'label': 'Last 30 days', 'value': 4},
+         ],
+         value='',
+         labelStyle={'width': '15%','display': 'inline-block'}
+         )
+         ])
+    return get_radio_button
+
+def get_quick_start_end_date(value):
+    os.environ['TZ'] = 'Asia/Kolkata'
+    today = datetime.datetime.now() - datetime.timedelta(days = 0)
+    today = today.strftime("%Y-%m-%d")
+    yesterday = datetime.datetime.now() - datetime.timedelta(days = 1)
+    yesterday = yesterday.strftime("%Y-%m-%d")
+    last2days = datetime.datetime.now() - datetime.timedelta(days = 2)
+    last2days = last2days.strftime("%Y-%m-%d")
+    last7days = datetime.datetime.now() - datetime.timedelta(days = 7)
+    last7days = last7days.strftime("%Y-%m-%d")
+    last30days = datetime.datetime.now() - datetime.timedelta(days = 30)
+    last30days = last30days.strftime("%Y-%m-%d")
+
+
+    if(value == 0):
+        start_date = end_date = today
+    elif(value == 1):
+        start_date = end_date = yesterday
+    elif(value == 2):
+        start_date = last2days
+        end_date = yesterday
+    elif(value == 3):
+        start_date = last7days
+        end_date = yesterday
+    elif(value == 4):
+        start_date = last30days
+        end_date = yesterday
+    else:
+        start_date = end_date = None
+
+    return start_date,end_date
+
+
+def time_range():
+    get_time_range = html.Div([
+        html.Div(date_picker(),className="row",style={'textAlign': 'center'}),
+        # Release Data Table
+            html.Div(
+                html.Table(id='output-container-date-picker-range',style={'margin': '0 auto'}),
+                className='twelve columns'),
+        ])
+    return get_time_range
+
+
+def quick_ranges():
+    get_quick_range = html.Div([
+        html.Div(radio_button(),className="row",style={'textAlign': 'center'}),
+        # Release Data Table
+            html.Div(
+                html.Table(id='output-container-quick-ranges',style={'margin': '0 auto'}),
+                className='twelve columns'),
+        ])
+    return get_quick_range
+
+
+#########################
+# Dashboard Layout / View
+#########################
 # Set up Dashboard and create layout
 #app = dash.Dash()
 
@@ -139,57 +315,27 @@ app = dash.Dash(__name__)
 server = app.server
 
 app.title = 'Release Dashboard'
-
-'''
-app.css.append_css({
-    "external_url": "https://codepen.io/chriddyp/pen/bWLwgP.css"
-})
-'''
+app.config['suppress_callback_exceptions']=True
 
 app.layout = html.Div([
-    # Page Header
-    html.Div([
-        html.H1('Production Release Dashboard',style={'textAlign': 'center'})
-    ]),
-    # Dropdown Grid
-    html.Div([
-        html.Div([
-            # Select Component Dropdown
-            html.Div([
-                html.Div('Component', className='three columns'),
-                html.Div(dcc.Dropdown(id='component-selector',
-                                      options=onLoad_comp_names()),
-                         className='nine columns')
-            ]),
-            # Select SubComponent Dropdown
-            html.Div([
-                html.Div('Sub Component', className='three columns'),
-                html.Div(dcc.Dropdown(id='subcomponent-selector'),
-                         className='nine columns')
-            ]),
-        ], className='offset-by-three six columns'),
-        # Empty
-        html.Div(className='six columns'),
-        html.Div(className='six columns'),
-        html.Div(className='six columns'),
-        html.Div(className='six columns'),
-        html.Div(className='six columns'),
-    ], className='row'),
-    # Match Results Grid
-    html.Div([
-        # Release Data Table
-        html.Div(
-            html.Table(id='release-data',style={'margin': '0 auto'}),
-            className='twelve columns'
-        ),
-    ]),
+    get_header(),
+    get_tabs(),
 ])
-
 
 #############################################
 # Interaction Between Components / Controller
 #############################################
 
+#History/TimeLine Tab Selector
+@app.callback(Output('tab-output', 'children'),
+              [Input('tabs', 'value')])
+def display_main_tabs(value):
+    if value == 'history':
+        return release_history()
+    elif value == 'timeline':
+        return release_timeline()
+    else:
+        return None
 
 # Load Sub Components in Dropdown
 @app.callback(
@@ -215,8 +361,41 @@ def populate_subcomponent_selector(comp):
     ]
 )
 def load_release_data(comp,subcomp):
-    results = get_release_data(comp,subcomp)
-    return generate_table(results, max_rows=50)
+    if(comp is not None and subcomp is not None):
+        results = get_release_data(comp,subcomp)
+        return generate_table(results, max_rows=50)
+
+#TimeLine Tab Quick/Time Ranges
+@app.callback(Output('tab-output-timeline', 'children'),
+              [Input('tabs-timeline', 'value')])
+def display_content_timeline(value):
+    if value == 'quick':
+        return quick_ranges()
+    elif value == 'duration':
+        return time_range()
+    else:
+        return None
+
+#Quick Ranges
+@app.callback(
+    dash.dependencies.Output('output-container-quick-ranges', 'children'),
+    [dash.dependencies.Input('quick-value', 'value')])
+def all_releases_quick(value):
+    start_date,end_date = get_quick_start_end_date(value)
+    if(start_date is not None and end_date is not None):
+        #print(start_date,end_date)
+        results = get_release_data_for_date_range(start_date, end_date)
+        return generate_table(results, max_rows=50)
+
+#Time Range
+@app.callback(
+    dash.dependencies.Output('output-container-date-picker-range', 'children'),
+    [dash.dependencies.Input('my-date-picker-range', 'start_date'),
+     dash.dependencies.Input('my-date-picker-range', 'end_date')])
+def all_releases(start_date,end_date):
+    if(start_date is not None and end_date is not None):
+        results = get_release_data_for_date_range(start_date, end_date)
+        return generate_table(results, max_rows=50)
 
 # start Flask server
 if __name__ == '__main__':
