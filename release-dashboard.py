@@ -167,9 +167,9 @@ def get_header():
 
 def get_tabs():
     get_tabs = html.Div([
-        dcc.Tabs(id="tabs", value='history', children=[
-                dcc.Tab(label='Release History', value='history'),
+        dcc.Tabs(id="tabs", value='timeline', children=[
                 dcc.Tab(label='Release TimeLine', value='timeline'),
+                dcc.Tab(label='Release History', value='history'),
             ]),
         html.Div(id='tab-output')
         ])
@@ -222,13 +222,17 @@ def release_timeline():
 
 
 def date_picker():
+    start_date_temp = datetime.datetime.now() - datetime.timedelta(days = 0)
+    end_date_temp = datetime.datetime.now() - datetime.timedelta(days = -1)
     get_date = html.Div([
         dcc.DatePickerRange(
             id='my-date-picker-range',
             initial_visible_month=dt.now(),
             day_size = 30,
             month_format = "MMM, YYYY",
-        ),
+            start_date = start_date_temp.strftime("%Y-%m-%d"),
+            end_date = end_date_temp.strftime("%Y-%m-%d"),
+	    ),
         ])
     return get_date
 
@@ -244,7 +248,7 @@ def radio_button():
             {'label': 'Last 7 days', 'value': 3},
             {'label': 'Last 30 days', 'value': 4},
          ],
-         value='',
+         value=0,
          labelStyle={'width': '15%','display': 'inline-block'}
          )
          ])
@@ -316,6 +320,9 @@ server = app.server
 
 app.title = 'Release Dashboard'
 app.config['suppress_callback_exceptions']=True
+
+#app.css.config.serve_locally = True
+#app.scripts.config.serve_locally = True
 
 app.layout = html.Div([
     get_header(),
@@ -400,4 +407,4 @@ def all_releases(start_date,end_date):
 # start Flask server
 if __name__ == '__main__':
 #    app.run_server(debug=True,host='0.0.0.0',port=8080)
-    app.run_server(debug=True)
+    app.run_server(debug=False)
