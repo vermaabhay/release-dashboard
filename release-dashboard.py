@@ -135,7 +135,7 @@ def generate_table(dataframe, max_rows=10):
                     subcomp = value
                     cell = html.Td(children=value)
                 elif (col == 'BuildNum' and comp is not None and subcomp is not None):
-                    build_url = 'https://jenkins.ops.snapdeal.io/job/'+comp+'/job/'+subcomp+'/job/build/'+str(value)
+                    build_url = 'https://jenkins.ops.company.io/job/'+comp+'/job/'+subcomp+'/job/build/'+str(value)
                     cell = html.Td(html.A(href=build_url, target="_blank", children="#"+str(value)))
                 else:
                     cell = html.Td(children=value)
@@ -413,5 +413,5 @@ def all_releases(start_date,end_date):
 
 # start Flask server
 if __name__ == '__main__':
-#    app.run_server(debug=True,host='0.0.0.0',port=8080)
-    app.run_server(debug=False)
+    app.run_server(debug=True,host='0.0.0.0',port=8080)
+#    app.run_server(debug=False)
