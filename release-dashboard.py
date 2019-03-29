@@ -76,11 +76,13 @@ def get_sub_comp_names(comp_name):
     return subComps
 
 
-def get_release_data(comp_name,sub_comp_name):
+def get_release_data(comp_name,sub_comp_name=None):
 
     '''Returns release data for the respective compnent and sub-component'''
-
-    query = "SELECT * FROM ReleaseData WHERE CompName='%s' AND SubCompName='%s' ORDER BY ReleaseDate DESC" % (comp_name,sub_comp_name)
+    if(sub_comp_name):
+        query = "SELECT * FROM ReleaseData WHERE CompName='%s' AND SubCompName='%s' ORDER BY ReleaseDate DESC" % (comp_name,sub_comp_name)
+    else:
+        query = "SELECT * FROM ReleaseData WHERE CompName='%s' ORDER BY ReleaseDate DESC" % (comp_name)
     results = fetch_data(query)
     return results
 
@@ -375,7 +377,7 @@ def populate_subcomponent_selector(comp):
     ]
 )
 def load_release_data(comp,subcomp):
-    if(comp is not None and subcomp is not None):
+    if(comp is not None):
         results = get_release_data(comp,subcomp)
         return generate_table(results, max_rows=50)
 
